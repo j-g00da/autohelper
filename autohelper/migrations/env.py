@@ -6,8 +6,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from autohelper.db import cache_metadata as target_metadata
-from autohelper.settings import get_app_settings, get_app_settings_async
+from autohelper.framework.app_settings import get_app_settings, get_app_settings_async
+from autohelper.framework.db import db_cache_metadata as target_metadata
 
 config = context.config
 

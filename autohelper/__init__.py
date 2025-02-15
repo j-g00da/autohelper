@@ -1,21 +1,16 @@
-from .app import configure, run
+import logfire
 
-__all__ = ("configure", "run")
+default_modules: tuple[str, ...] = (
+    "activities",
+    "decorations",
+    "journal",
+    "logs",
+)
 
 
-def script_run(package_name: str) -> None:
-    import logfire
-
-    from autohelper.framework import Feature
+def go() -> None:
+    from autohelper.framework import configure, run
 
     logfire.configure()
-    this = Feature(
-        package_name=package_name,
-        update_state_registry=True,
-    )
-    this.call("configure")
-    this.call("run")
-
-
-if __name__ == "__main__":
-    script_run(__name__)
+    configure()
+    run()

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
-from dataclasses import InitVar, dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cached_property
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import arc
@@ -15,17 +17,24 @@ import logfire
 from hikari.impl.config import CacheSettings, HTTPSettings, ProxySettings
 from hikari.internal.data_binding import JSONDecoder, JSONEncoder
 
-from autohelper.framework.features import Feature, FeatureSet
-from autohelper.settings import AutoHelperSettings, get_app_settings
+from autohelper.framework.app_settings import AppSettings, get_app_settings
+from autohelper.framework.utils import errors
 
 if TYPE_CHECKING:
     from _typeshed import StrPath
 
-_app_state_var: ContextVar[AppState] = ContextVar("app_state")
+__all__ = (
+    "App",
+    "BotArgs",
+    "RunArgs",
+    "configure",
+    "get_app",
+    "run",
+)
 
 
-def get_app_state() -> AppState:
-    return _app_state_var.get()
+_app_state_var: ContextVar[App] = ContextVar("app_state")
+get_app, _set_app = _app_state_var.get, _app_state_var.set
 
 
 class BotArgs(TypedDict, total=False):
@@ -60,15 +69,10 @@ class RunArgs(TypedDict, total=False):
     shard_count: int | None
 
 
-@dataclass(frozen=True)
-class AppState:
-    settings: AutoHelperSettings
-    update_current_context: InitVar[bool]
-
-    def __post_init__(self, update_current_context: bool) -> None:
-        if not update_current_context:
-            return
-        _app_state_var.set(self)
+@dataclass
+class App:
+    settings: AppSettings
+    _modules: tuple[ModuleType, ...] = field(init=False, default=())
 
     @cached_property
     def bot_args(self) -> BotArgs:
@@ -95,23 +99,33 @@ class AppState:
             is_dm_enabled=self.settings.dm_enabled,
         )
 
-    @cached_property
-    def feature_set(self) -> FeatureSet:
-        return FeatureSet(
-            [
-                Feature(package_name, update_state_registry=True)
-                for package_name in self.settings.install_features
-                + self.settings.extra_features
-            ]
-        )
+    def _module_importer(self) -> Generator[ModuleType]:
+        with errors("Can't import all modules") as maybe:
+            for package_name in (
+                *self.settings.install_modules,
+                *self.settings.extra_modules,
+            ):
+                with logfire.span(
+                    "Importing {package_name}", package_name=package_name
+                ):
+                    module = maybe(import_module)(package_name)
+                    logfire.info("Imported {module}", module=module)
+                    yield module
 
-    def configure(self) -> None:
-        self.feature_set.call("configure")
+    def import_modules(self) -> None:
+        self._modules = tuple(self._module_importer())
+
+    @property
+    def modules(self) -> tuple[ModuleType, ...]:
+        return self._modules
 
     def run(self) -> None:
         import __main__
 
-        self.feature_set.call("setup")
+        logfire.debug(
+            "Modules: {modules}",
+            modules=self.modules,
+        )
 
         with logfire.span(
             "Starting the bot initiated by {module}...",
@@ -123,14 +137,12 @@ class AppState:
                 close_passed_executor=True,
             )
 
-    async def stop(self) -> None:
-        await self.bot.close()
-
 
 def configure() -> None:
-    app = AppState(get_app_settings(), update_current_context=True)
-    app.configure()
+    app = App(get_app_settings())
+    _set_app(app)
+    app.import_modules()
 
 
 def run() -> None:
-    get_app_state().run()
+    get_app().run()

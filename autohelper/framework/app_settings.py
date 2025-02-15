@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from contextvars import ContextVar
+from itertools import filterfalse
 from os import getenv
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Self, cast
 
-from pydantic import DirectoryPath, Field, SecretStr, computed_field
+from pydantic import DirectoryPath, Field, SecretStr, computed_field, model_validator
 from pydantic_core import MultiHostUrl
 from pydantic_settings import (
     BaseSettings,
@@ -14,21 +16,18 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from autohelper import features as features_pkg
+from autohelper import default_modules
 
-__all__ = ("AutoHelperSettings",)
+__all__ = (
+    "AppSettings",
+    "get_app_settings",
+    "get_app_settings_async",
+)
 
-app_settings_var: ContextVar[AutoHelperSettings] = ContextVar("app_settings")
-
-
-def get_default_feature_names() -> list[str]:
-    return [
-        f"{features_pkg.__name__}.{module}"
-        for module in getattr(features_pkg, "default_features", ())
-    ]
+app_settings_var: ContextVar[AppSettings] = ContextVar("app_settings")
 
 
-class AutoHelperSettings(
+class AppSettings(
     BaseSettings,
     env_prefix="AUTOHELPER_",
     env_file=getenv("AUTOHELPER_ENV_FILE") or ".env",
@@ -40,11 +39,16 @@ class AutoHelperSettings(
     quiet: bool = False
     autohelper_development: bool = Field(default=False)
     default_enabled_guilds: list[int] = Field(default_factory=list)
-    install_features: list[str] = Field(default_factory=get_default_feature_names)
-    extra_features: list[str] = Field(default_factory=list)
-    feature_paths: list[DirectoryPath] = Field(default_factory=list)
+    install_modules: list[str] = Field(default=default_modules)
+    extra_modules: list[str] = Field(default_factory=list)
+    python_path: list[DirectoryPath] = Field(default_factory=list)
 
-    features: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    modules: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def side_effects(self) -> Self:
+        sys.path.extend(filterfalse(sys.path.__contains__, map(str, self.python_path)))
+        return self
 
     @computed_field  # type: ignore[prop-decorator]  # python/mypy#1362
     @property
@@ -61,20 +65,6 @@ class AutoHelperSettings(
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """
-        Define the sources and their order for loading the settings values.
-
-        Args:
-            settings_cls: The Settings class.
-            init_settings: The `InitSettingsSource` instance.
-            env_settings: The `EnvSettingsSource` instance.
-            dotenv_settings: The `DotEnvSettingsSource` instance.
-            file_secret_settings: The `SecretsSettingsSource` instance.
-
-        Returns:
-            A tuple containing the sources and their order for loading.
-
-        """
         toml_settings = TomlConfigSettingsSource(
             settings_cls=settings_cls,
             toml_file=cls.model_config.get("toml_file"),
@@ -88,19 +78,19 @@ class AutoHelperSettings(
         )
 
 
-async def get_app_settings_async() -> AutoHelperSettings:
+async def get_app_settings_async() -> AppSettings:
     """Get the application settings without blocking the event loop."""
     settings = app_settings_var.get(None)
     if settings is None:
-        settings = cast(AutoHelperSettings, await asyncio.to_thread(AutoHelperSettings))  # type: ignore[call-arg]
+        settings = cast(AppSettings, await asyncio.to_thread(AppSettings))  # type: ignore[call-arg]
         app_settings_var.set(settings)
     return settings
 
 
-def get_app_settings() -> AutoHelperSettings:
+def get_app_settings() -> AppSettings:
     """Get the application settings."""
     settings = app_settings_var.get(None)
     if settings is None:
-        settings = AutoHelperSettings()  # type: ignore[call-arg]
+        settings = AppSettings()  # type: ignore[call-arg]
         app_settings_var.set(settings)
     return settings

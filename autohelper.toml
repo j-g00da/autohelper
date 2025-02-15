@@ -1,12 +1,12 @@
 cache_db_filename = "autohelper_cache.db"
 autohelper_development = true
-feature_paths = ["projects/"]
-extra_features = ["gauss.features.channels"]
+python_path = ["projects/"]
+install_modules = ["gauss.features.channels"]
 
-[features.builtin.activities]
+[modules.activities]
 initial_activity_name = "Starting up..."
 initial_activity_state = "The client just started."
 
-[features.gauss-channels]
+[modules.channels]
 community = { main = 1308472913497817118, forum = 1308472896116490360 }
 internal = { admins = 1308463812130771088 }

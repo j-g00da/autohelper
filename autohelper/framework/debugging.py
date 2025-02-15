@@ -11,7 +11,7 @@ __all__ = (
     "save_location",
 )
 
-LOCATION_ATTR = "__autohelper_location__"
+LOCATION_ATTR = "__object_location__"
 
 
 class LocationInfo(NamedTuple):

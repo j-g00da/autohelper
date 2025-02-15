@@ -1,4 +1,4 @@
-from autohelper import script_run
+import autohelper
 
 if __name__ == "__main__":
-    script_run("autohelper")
+    autohelper.go()

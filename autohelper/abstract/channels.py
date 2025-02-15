@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import Never, cast
+from typing import cast
 
-import arc
 import hikari
 from pydantic import model_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from autohelper.app import get_app_state
+from autohelper.framework.app import get_app
 
 __all__ = (
     "Category",
@@ -17,10 +16,7 @@ __all__ = (
     "GuildForumChannel",
     "GuildTextChannel",
     "GuildVoiceChannel",
-    "setup",
 )
-
-plugin = arc.GatewayPlugin(__name__)
 
 
 @pydantic_dataclass
@@ -30,8 +26,8 @@ class Channel[
     channel_id: int
 
     def get_channel(self) -> HikariChannel:
-        app_state = get_app_state()
-        channel = app_state.bot.cache.get_guild_channel(self.channel_id)
+        app = get_app()
+        channel = app.bot.cache.get_guild_channel(self.channel_id)
         if not channel:
             msg = f"Channel {self.channel_id} not found in cache"
             raise LookupError(msg)
@@ -56,8 +52,3 @@ class Channels(BaseSettings):
 
 class Category(BaseSettings):
     model_config = SettingsConfigDict(extra="allow")
-
-
-def setup() -> Never:
-    msg = f"{__name__!r} is an abstract feature"
-    raise NotImplementedError(msg)
