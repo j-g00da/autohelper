@@ -29,12 +29,12 @@ jobs:
     - name: Install
       id: install
       run: uv sync --frozen --python ${{matrix.version}}
+    - name: Run tests
+      if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+      run: uv run --no-sync --frozen --python ${{matrix.version}} pytest -svv
     - name: Lint
       if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
       run: uv run --no-sync --frozen --python ${{matrix.version}} ruff check .
     - name: Check type safety
       if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
       run: uv run --no-sync --frozen --python ${{matrix.version}} mypy .
-    - name: Run tests
-      if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-      run: uv run --no-sync --frozen --python ${{matrix.version}} pytest -svv
